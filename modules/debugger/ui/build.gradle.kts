@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":meta-core"))
     implementation(project(":typeSystem-core"))
     implementation(project(":project-core"))
+    implementation(project(":beanSystem-core"))
 
     intellijPlatform {
         intellijIdea(properties("intellij.version")) {
