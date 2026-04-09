@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package sap.commerce.toolset.debugger.engine.managerThread;
+package sap.commerce.toolset.debugger.engine.managerThread
 
 import com.intellij.debugger.JavaDebuggerBundle
 import com.intellij.debugger.engine.DebuggerUtils
@@ -31,15 +31,13 @@ import com.intellij.debugger.ui.tree.render.DescriptorLabelListener
 import com.intellij.debugger.ui.tree.render.ToStringCommand
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtil
-import com.jetbrains.rd.util.firstOrNull
 import com.sun.jdi.ObjectReference
 import com.sun.jdi.Type
 import com.sun.jdi.Value
-import sap.commerce.toolset.debugger.DebuggerConstants
-import sap.commerce.toolset.debugger.toTypeCode
+import sap.commerce.toolset.beanSystem.meta.BSMetaHelper
 import sap.commerce.toolset.beanSystem.meta.BSMetaModelAccess
 
-internal class BeanToStringCommand (
+internal class BeanToStringCommand(
     private val valueDescriptor: ValueDescriptor,
     private val labelListener: DescriptorLabelListener,
     evaluationContext: EvaluationContext,
@@ -90,14 +88,42 @@ internal class BeanToStringCommand (
     }
 
     private fun toStringExpression(type: Type, project: Project): String {
-        val className = type.name().substringAfterLast('.')
-        val meta = BSMetaModelAccess.getInstance(project).findMetaBeanByName(className) ?: return fallbackExpression()
+        // Use the full class name as the key — beans.xml declares classes by FQN (without generics)
+        val meta = BSMetaModelAccess.getInstance(project).findMetaBeanByName(type.name())
+            ?: return fallbackExpression()
 
-        // retrieve the first 3 getters of the bean's properties.¬
+        // Build expression from the first 3 non-null property getters
         val getters = meta.allProperties.values
             .take(3)
-            .mapNotNull { prop -> prop.name?.let { "get${it.replaceFirstChar(Char::uppercase)}()" } }
+            .mapNotNull { prop ->
+                prop.name?.let { "get${it.replaceFirstChar(Char::uppercase)}()" }
+            }
 
-        return buildToStringExpression(getters)
+        return if (getters.isEmpty()) fallbackExpression()
+        else buildToStringExpression(getters)
     }
+
+    /**
+     * Builds a Java expression that concatenates up to 3 bean property values separated by " | ".
+     * Uses Object intermediate variables so any return type is safely handled (no cast errors).
+     * Null values are displayed as "?".
+     */
+    private fun buildToStringExpression(getters: List<String>): String {
+        val fieldDeclarations = getters.mapIndexed { index, getter ->
+            "Object _f$index = $getter; String fieldValue$index = _f$index == null ? \"?\" : _f$index.toString();"
+        }.joinToString("\n")
+
+        val concat = getters.indices.joinToString(" + \" | \" + ") { "fieldValue$it" }
+
+        return """
+            $fieldDeclarations
+            $concat
+        """.trimIndent()
+    }
+
+    /**
+     * Fallback when the bean is not found in the meta model or has no properties.
+     * Delegates to the object's own toString() so the debugger still shows something useful.
+     */
+    private fun fallbackExpression() = "toString()"
 }
