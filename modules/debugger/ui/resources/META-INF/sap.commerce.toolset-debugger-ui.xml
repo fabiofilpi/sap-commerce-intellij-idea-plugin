@@ -19,6 +19,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <debugger.compoundRendererProvider implementation="sap.commerce.toolset.debugger.ui.tree.render.ModelRenderer"/>
+        <debugger.compoundRendererProvider implementation="sap.commerce.toolset.debugger.ui.tree.render.BeanRenderer"/>
     </extensions>
 
 </idea-plugin>
